@@ -1,0 +1,12 @@
+{
+  "name": "seacatcode-clean-bookmark-xml",
+  "version": "1.0.0",
+  "description": "구글 계정별로 따로 관리되는 북마크 병합",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
