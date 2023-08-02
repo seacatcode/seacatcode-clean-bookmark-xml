@@ -10,10 +10,12 @@ const path = require('path')
 async function rootFn() {
     const { rejectedFile, fulfilledFile } = await getFiles();
 
-    console.log('rejectedFile', rejectedFile);
-    rejectedFile.splice(0);
+    if (rejectedFile.length) {
+        console.log('rejectedFile', rejectedFile);
+        rejectedFile.splice(0);
+    }
 
-    const parseJsonArray = fulfilledFile.map(i => parseFile(i));
+    const parseArray = fulfilledFile.map(i => parseFile(i));
 }
 
 /**
@@ -31,7 +33,7 @@ async function getFiles() {
     const asyncReadFiles = await Promise.allSettled(xmlFileFilter.map(fileName => {
         const filePath = path.join(bookmarkPath, fileName);
         return fsPromises.readFile(filePath, { encoding: 'utf-8' });
-    }).concat(Promise.reject(new Error('Hello'))));
+    }));
 
     const { rejectedFile, fulfilledFile } = asyncReadFiles.reduce(function (result, item) {
         const { rejectedFile, fulfilledFile } = result;
@@ -53,10 +55,91 @@ async function getFiles() {
 }
 
 
+let idx = 0;
 function parseFile(rawString) {
     const res = {};
 
+    const raw = rawString.replaceAll('\r\n', '\n');
+
+    /**
+        // Remove Tag
+        <!DOCTYPE NETSCAPE-Bookmark-file-1>
+        <!-- This is an automatically generated file.
+            It will be read and overwritten.
+            DO NOT EDIT! -->
+        <META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
+        <TITLE>Bookmarks</TITLE>
+        <H1>Bookmarks</H1>
+     */
+    const data = raw.substring(254);
+
+    // if (idx == 2) {
+    const lines = data.split('\n').map(i => i.trim());
+    const objs = lines.map(i => parseLine(i));
+    // }
+
+    idx++;
     return res;
+}
+
+function parseLine(text) {
+    const startHeading3 = '<DT><H3';
+    const startAnchor = '<DT><A';
+
+    const startGroup = '<DL><p>';
+    const closeGroup = '</DL><p>';
+
+    if (text.indexOf(startHeading3) === 0) {
+        const $attr = {};
+        let $text = '';
+
+        // Remove Close Tag
+        text = text.substring(0, text.length - '</H3>'.length);
+
+        $text = text.substring(1 + text.lastIndexOf('>'));
+        const attr = text.substring(startHeading3.length + 1, text.lastIndexOf('>'));
+
+        let stack = [];
+        let token = [];
+        let buff = '';
+
+        for (let i = 0; i < attr.length; i++) {
+            let it = attr.charAt(i);
+        }
+
+        return { type: 'heading', $attr, $text };
+    }
+
+    if (text.indexOf(startAnchor) === 0) {
+        const $attr = {};
+        let $text = '';
+
+        // Remove Close Tag
+        text = text.substring(0, text.length - '</A>'.length);
+
+        $text = text.substring(1 + text.lastIndexOf('>'));
+        const attr = text.substring(startAnchor.length + 1, text.lastIndexOf('>'));
+
+        let stack = [];
+        let token = [];
+        let buff = '';
+
+        for (let i = 0; i < attr.length; i++) {
+            let it = attr.charAt(i);
+        }
+
+        return { type: 'anchor', $attr, $text };
+    }
+
+    if (text.indexOf(startGroup) === 0) {
+        return { type: 'start-group' };
+    }
+
+    if (text.indexOf(closeGroup) === 0) {
+        return { type: 'close-group' };
+    }
+
+    return { type: 'unknown', text: text };
 }
 
 rootFn();
