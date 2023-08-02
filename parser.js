@@ -46,7 +46,10 @@ async function rootFn() {
     }
 
     const parseArray = fulfilledFile.map(i => parseFile(i));
-    await fsPromises.writeFile(path.join(__dirname, 'output.json'), JSON.stringify(parseArray, null, 4), { encoding: 'utf-8' });
+    // await fsPromises.writeFile(path.join(__dirname, 'output.json'), JSON.stringify(parseArray, null, 4), { encoding: 'utf-8' });
+
+    const mergeData = parseArray.reduce(mergeBookmarks);
+    console.log({ mergeData });
 }
 
 /**
@@ -267,3 +270,65 @@ function parseLine(text) {
 }
 
 rootFn();
+
+/**
+    ADD_DATE(anchor) 혹은 LAST_MODIFIED(group) 현재 시간으로갱신
+ */
+function updateLastModify(item, value) {
+    let newValue = value ?? String(Date.now()).substring(0, 10);
+    if (item.type === 'anchor') {
+        item.$attr.ADD_DATE = newValue;
+    }
+
+    if (item.type === 'group') {
+        if (item.header) {
+            item.header.$attr.LAST_MODIFIED = newValue;
+        }
+    }
+}
+
+/**
+    ADD_DATE 현재 시간으로갱신
+ */
+function upateAddDate(item, value) {
+    let newValue = value ?? String(Date.now()).substring(0, 10);
+    if (item.type === 'anchor') {
+        item.$attr.ADD_DATE = newValue;
+    }
+
+    if (item.type === 'group') {
+        if (item.header) {
+            item.header.$attr.ADD_DATE = newValue;
+            item.header.$attr.LAST_MODIFIED = '0';
+        }
+    }
+}
+
+function mergeBookmarks(prevBookmark, currentBookmark) {
+    if (prevBookmark == null) return currentBookmark;
+    const mergeItem = [].concat(prevBookmark.item).concat(currentBookmark.item).reduce((init, curr) => {
+        const { header, item } = curr;
+        const { $text, $attr } = header;
+
+        init.item.push(...item);
+
+        let tAttr = init.header[$text];
+        if (tAttr == null) {
+            init.header[$text] = $attr;
+        } else {
+            const [T_ADD_DATE, T_LAST_MODIFIED] = [tAttr.ADD_DATE, tAttr.LAST_MODIFIED].map(i => Number(i));
+            const [B_ADD_DATE, B_LAST_MODIFIED] = [$attr.ADD_DATE, $attr.LAST_MODIFIED].map(i => Number(i));
+            const [L_ADD_DATE, L_LAST_MODIFIED] = [Math.min(T_ADD_DATE, B_ADD_DATE), Math.max(B_ADD_DATE, B_LAST_MODIFIED)].map(i => String(i));
+
+            init.header[$text] = {
+                ADD_DATE: L_ADD_DATE,
+                LAST_MODIFIED: L_LAST_MODIFIED,
+                PERSONAL_TOOLBAR_FOLDER: 'true'
+            };
+        }
+
+        return init;
+    }, { header: {}, item: [] });
+
+    return prevBookmark;
+}
