@@ -46,10 +46,7 @@ async function rootFn() {
     }
 
     const parseArray = fulfilledFile.map(i => parseFile(i));
-    // await fsPromises.writeFile(path.join(__dirname, 'output.json'), JSON.stringify(parseArray, null, 4), { encoding: 'utf-8' });
-
     const mergeData = parseArray.reduce(mergeBookmarks);
-    console.log({ mergeData });
 }
 
 /**
@@ -305,30 +302,67 @@ function upateAddDate(item, value) {
 }
 
 function mergeBookmarks(prevBookmark, currentBookmark) {
+
     if (prevBookmark == null) return currentBookmark;
+
     const mergeItem = [].concat(prevBookmark.item).concat(currentBookmark.item).reduce((init, curr) => {
         const { header, item } = curr;
         const { $text, $attr } = header;
 
-        init.item.push(...item);
+        let preVal = init[$text];
 
-        let tAttr = init.header[$text];
-        if (tAttr == null) {
-            init.header[$text] = $attr;
-        } else {
-            const [T_ADD_DATE, T_LAST_MODIFIED] = [tAttr.ADD_DATE, tAttr.LAST_MODIFIED].map(i => Number(i));
-            const [B_ADD_DATE, B_LAST_MODIFIED] = [$attr.ADD_DATE, $attr.LAST_MODIFIED].map(i => Number(i));
-            const [L_ADD_DATE, L_LAST_MODIFIED] = [Math.min(T_ADD_DATE, B_ADD_DATE), Math.max(B_ADD_DATE, B_LAST_MODIFIED)].map(i => String(i));
-
-            init.header[$text] = {
-                ADD_DATE: L_ADD_DATE,
-                LAST_MODIFIED: L_LAST_MODIFIED,
-                PERSONAL_TOOLBAR_FOLDER: 'true'
+        if (preVal == null) {
+            init[$text] = {
+                header: $attr,
+                item: item
             };
+        } else {
+            const newItem = [].concat(init[$text].item).concat(item);
+            init[$text].item = newItem;
+
+            const initHeader = init[$text].header;
+
+            const [I_ADD_DATE, I_LAST_MODIFIED, I_PERSONAL_TOOLBAR_FOLDER] = [
+                initHeader['ADD_DATE'],
+                initHeader['LAST_MODIFIED']
+            ].map(i => Number(i)).concat(initHeader['PERSONAL_TOOLBAR_FOLDER']);
+
+            const [C_ADD_DATE, C_LAST_MODIFIED, C_PERSONAL_TOOLBAR_FOLDER] = [
+                $attr['ADD_DATE'],
+                $attr['LAST_MODIFIED']
+            ].map(i => Number(i)).concat($attr['PERSONAL_TOOLBAR_FOLDER']);
+
+            const newHeader = init[$text].header = {
+                ADD_DATE: String(Math.min(I_ADD_DATE, C_ADD_DATE)),
+                LAST_MODIFIED: String(Math.max(I_LAST_MODIFIED, C_LAST_MODIFIED))
+            };
+
+            if (I_PERSONAL_TOOLBAR_FOLDER === 'true' || C_PERSONAL_TOOLBAR_FOLDER === 'true') {
+                newHeader['PERSONAL_TOOLBAR_FOLDER'] = 'true';
+            }
+
         }
 
         return init;
-    }, { header: {}, item: [] });
+    }, {});
 
-    return prevBookmark;
+    const mItem = Object.entries(mergeItem).map(i => {
+        const [text, ot] = i;
+        const { header, item } = ot;
+        return {
+            "type": "group",
+            "header": {
+                "type": "heading",
+                "$attr": header,
+                "$text": text
+            },
+            "item": item
+        };
+    });
+
+    return {
+        "type": "group",
+        "header": null,
+        "item": mItem
+    };
 }
