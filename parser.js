@@ -2,6 +2,36 @@ const fsPromises = require('fs/promises');
 const path = require('path')
 
 /**
+    Interface Group {
+        type: "group",
+
+        header : null | {
+            "type": "heading",
+            "$attr": {
+                ADD_DATE: string,
+                LAST_MODIFIED: string,
+                PERSONAL_TOOLBAR_FOLDER ?: "true"
+            },
+            $text: string
+        },
+
+        item : Array<Group | Anchor>
+    }
+
+    Interface Anchor {
+        type: "anchor",
+
+        $attr: {
+            HREF: string,
+            ADD_DATE: string,
+            ICON ?: string
+        },
+
+        $text: string
+    }
+ */
+
+/**
  * bookmark 디렉토리에 .htm 혹은 .html 파일을 추가하면
  * 구글 크롬 브라우저 북마크 내보내기 파일로 판단하고
  * JSON 데이터로 변환 합니다
@@ -16,6 +46,7 @@ async function rootFn() {
     }
 
     const parseArray = fulfilledFile.map(i => parseFile(i));
+    await fsPromises.writeFile(path.join(__dirname, 'output.json'), JSON.stringify(parseArray, null, 4), { encoding: 'utf-8' });
 }
 
 /**
@@ -55,9 +86,7 @@ async function getFiles() {
 }
 
 
-let idx = 0;
 function parseFile(rawString) {
-    const res = {};
 
     const raw = rawString.replaceAll('\r\n', '\n');
 
@@ -73,13 +102,54 @@ function parseFile(rawString) {
      */
     const data = raw.substring(254);
 
-    // if (idx == 2) {
     const lines = data.split('\n').map(i => i.trim());
     const objs = lines.map(i => parseLine(i));
-    // }
 
-    idx++;
-    return res;
+    let top = null;
+    let stack = [];
+    let header = null;
+
+    objs.forEach(i => {
+
+        if (i.type === 'heading') {
+            header = i;
+            return;
+        }
+
+        if (i.type === 'start-group') {
+            let parent = stack.at(-1);
+            const newGroup = { type: 'group', header: header, item: [] /*, parent: parent */ };
+
+            if (parent !== void 0) {
+                parent.item.push(newGroup);
+            }
+
+            stack.push(newGroup);
+
+            if (top == null) top = newGroup;
+
+            return;
+        }
+
+        if (i.type === 'close-group') {
+            stack.pop();
+            return;
+        }
+
+
+        if (i.type === 'anchor') {
+            let parent = stack.at(-1);
+            const newItem = Object.assign({}, i /*, { parent: parent }*/);
+            parent.item.push(newItem);
+            return;
+        }
+
+        if (i.type === 'unknown') {
+            return;
+        }
+
+    });
+    return top;
 }
 
 function parseLine(text) {
@@ -99,12 +169,39 @@ function parseLine(text) {
         $text = text.substring(1 + text.lastIndexOf('>'));
         const attr = text.substring(startHeading3.length + 1, text.lastIndexOf('>'));
 
-        let stack = [];
         let token = [];
         let buff = '';
 
         for (let i = 0; i < attr.length; i++) {
             let it = attr.charAt(i);
+            buff += it;
+
+            if (it === '"') {
+                while ((it = attr.charAt(++i)) != '"') {
+                    buff += it;
+                }
+                buff += it;
+
+                token.push({ type: 'value', value: buff.substring(1, buff.length - 1) });
+
+                buff = '';
+            }
+
+            if (it === '=') {
+                token.push({ type: 'key', value: buff.substring(0, buff.length - 1) });
+                buff = '';
+            }
+
+            if (it === ' ') {
+                const b = buff.substring(0, buff.length - 1);
+                buff = '';
+            }
+        }
+
+        for (let i = 0; i < token.length; i += 2) {
+            let key = token[i].value;
+            let value = token[i + 1].value;
+            $attr[key] = value;
         }
 
         return { type: 'heading', $attr, $text };
@@ -120,12 +217,39 @@ function parseLine(text) {
         $text = text.substring(1 + text.lastIndexOf('>'));
         const attr = text.substring(startAnchor.length + 1, text.lastIndexOf('>'));
 
-        let stack = [];
         let token = [];
         let buff = '';
 
         for (let i = 0; i < attr.length; i++) {
             let it = attr.charAt(i);
+            buff += it;
+
+            if (it === '"') {
+                while ((it = attr.charAt(++i)) != '"') {
+                    buff += it;
+                }
+                buff += it;
+
+                token.push({ type: 'value', value: buff.substring(1, buff.length - 1) });
+
+                buff = '';
+            }
+
+            if (it === '=') {
+                token.push({ type: 'key', value: buff.substring(0, buff.length - 1) });
+                buff = '';
+            }
+
+            if (it === ' ') {
+                const b = buff.substring(0, buff.length - 1);
+                buff = '';
+            }
+        }
+
+        for (let i = 0; i < token.length; i += 2) {
+            let key = token[i].value;
+            let value = token[i + 1].value;
+            $attr[key] = value;
         }
 
         return { type: 'anchor', $attr, $text };
