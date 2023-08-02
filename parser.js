@@ -48,10 +48,40 @@ async function rootFn() {
     const parseArray = fulfilledFile.map(i => parseFile(i));
     const mergeData = parseArray.reduce(mergeBookmarks);
 
+    removeDuplicateURLs(mergeData);
+
     await fsPromises.writeFile(path.join(__dirname, 'output.json'), JSON.stringify(mergeData, null, 3), { encoding: 'utf-8' });
     await fsPromises.writeFile(path.join(__dirname, 'output.html'), converXMLString(mergeData), { encoding: 'utf-8' });
 }
 
+/** 중복 URL 제거 */
+function removeDuplicateURLs(data, init = { urlMap: {}, root: null }) {
+    const { urlMap } = init;
+
+    const pItem = data.item;
+    data.item = [];
+
+    for (let i = 0; i < pItem.length; i++) {
+        const j = pItem[i];
+        if (j.type === 'group') {
+            data.item.push(removeDuplicateURLs(j, init));
+        }
+
+        if (j.type === 'anchor') {
+
+            /** 중복된 URL 이 없을 경우 등록 */
+            if (!urlMap[j['$attr']['HREF']]) {
+                urlMap[j['$attr']['HREF']] = true;
+                data.item.push(j);
+            }
+
+        }
+    }
+
+    return data;
+}
+
+/** JSON 데이터에서 XML 파일 생성 */
 function converXMLString(json) {
     let defaultHeader = `<!DOCTYPE NETSCAPE-Bookmark-file-1>
 <!-- This is an automatically generated file.
@@ -60,9 +90,17 @@ function converXMLString(json) {
 <META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
 <TITLE>Bookmarks</TITLE>
 <H1>Bookmarks</H1>`;
-    return [defaultHeader].concat('<DL><p>').concat(inGroup(json.item[0], 1)).concat('</DL><p>').concat('').join('\n');
+    let res = [defaultHeader];
+    res.push('<DL><p>');
+    json.item.forEach(it => {
+        res.push(inGroup(it, 1));
+    });
+    res.push('</DL><p>');
+    res.push('');
+    return res.join('\n');
 }
 
+/** depth 만큼 들여쓰기 된 XML 작성 */
 function inGroup(group, depth) {
     let depthChar = new Array(depth).fill('    ').join('');
 
