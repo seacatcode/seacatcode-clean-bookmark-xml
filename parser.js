@@ -47,6 +47,73 @@ async function rootFn() {
 
     const parseArray = fulfilledFile.map(i => parseFile(i));
     const mergeData = parseArray.reduce(mergeBookmarks);
+
+    await fsPromises.writeFile(path.join(__dirname, 'output.json'), JSON.stringify(mergeData, null, 3), { encoding: 'utf-8' });
+    await fsPromises.writeFile(path.join(__dirname, 'output.html'), converXMLString(mergeData), { encoding: 'utf-8' });
+}
+
+function converXMLString(json) {
+    let defaultHeader = `<!DOCTYPE NETSCAPE-Bookmark-file-1>
+<!-- This is an automatically generated file.
+        It will be read and overwritten.
+        DO NOT EDIT! -->
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
+<TITLE>Bookmarks</TITLE>
+<H1>Bookmarks</H1>`;
+    return [defaultHeader].concat('<DL><p>').concat(inGroup(json.item[0], 1)).concat('</DL><p>').concat('').join('\n');
+}
+
+function inGroup(group, depth) {
+    let depthChar = new Array(depth).fill('    ').join('');
+
+    let line = [];
+
+    if (group.header) {
+        const { ADD_DATE, LAST_MODIFIED, PERSONAL_TOOLBAR_FOLDER } = group.header.$attr;
+        let arr = [];
+        arr.push(depthChar);
+        arr.push('<DT><H3');
+        arr.push(` ADD_DATE="${ADD_DATE}"`);
+        arr.push(` LAST_MODIFIED="${LAST_MODIFIED}"`);
+        if (PERSONAL_TOOLBAR_FOLDER) { arr.push(` PERSONAL_TOOLBAR_FOLDER="${PERSONAL_TOOLBAR_FOLDER}"`); }
+        arr.push('>');
+        arr.push(group.header.$text);
+        arr.push('</H3>');
+        line.push(arr.join(''));
+    }
+
+    line.push(depthChar.concat('<DL><p>'));
+
+    if (group.item.length) {
+        const child = group.item.map(it => {
+            if (it.type === 'group') {
+                return inGroup(it, depth + 1);
+            }
+
+            if (it.type === 'anchor') {
+                const { $text, $attr } = it;
+                const { HREF, ADD_DATE, ICON } = $attr;
+                let arr = [];
+                arr.push(depthChar);
+                arr.push('    ');
+                arr.push('<DT><A');
+                arr.push(` HREF="${HREF}"`);
+                arr.push(` ADD_DATE="${ADD_DATE}"`);
+
+                if (ICON != null) { arr.push(` ICON="${ICON}"`); }
+                arr.push('>');
+                arr.push($text);
+                arr.push('</A>');
+                return arr.join('');
+            }
+        });
+
+        line.push(child.join('\n'));
+    }
+
+    line.push(depthChar.concat('</DL><p>'));
+
+    return line.join('\n');
 }
 
 /**
