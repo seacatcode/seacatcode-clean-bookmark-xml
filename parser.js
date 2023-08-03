@@ -49,9 +49,37 @@ async function rootFn() {
     const mergeData = parseArray.reduce(mergeBookmarks);
 
     removeDuplicateURLs(mergeData);
+    elevateToTopLevelPath(mergeData);
 
     await fsPromises.writeFile(path.join(__dirname, 'output.json'), JSON.stringify(mergeData, null, 3), { encoding: 'utf-8' });
     await fsPromises.writeFile(path.join(__dirname, 'output.html'), converXMLString(mergeData), { encoding: 'utf-8' });
+}
+
+/** 모든 북마크를 최상위 디렉토리로 올립니다 */
+function elevateToTopLevelPath(data, init = { topGroups: [], depth: 0 }) {
+    const { topGroups, depth } = init;
+
+    if (depth === 0) {
+        const pItem = data.item;
+        data.item = [];
+        topGroups.push(...pItem.map(i => Object.assign({}, i, { item: [] })));
+        topGroups.forEach((val, idx, arr) => {
+            data.item.push(val);
+            elevateToTopLevelPath(pItem[idx], { topGroups, depth: depth + 1 });
+        });
+    } else {
+        data.item.forEach(it => {
+            if (it.type === 'anchor') {
+                topGroups[0].item.push(it);
+            }
+
+            if (it.type === 'group') {
+                elevateToTopLevelPath(it, { topGroups, depth: depth + 1 });
+            }
+        });
+    }
+
+    return data;
 }
 
 /** 중복 URL 제거 */
