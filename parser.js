@@ -50,6 +50,7 @@ async function rootFn() {
 
     removeDuplicateURLs(mergeData);
     elevateToTopLevelPath(mergeData);
+    protocolGroup(mergeData);
 
     await fsPromises.writeFile(path.join(__dirname, 'output.json'), JSON.stringify(mergeData, null, 3), { encoding: 'utf-8' });
     await fsPromises.writeFile(path.join(__dirname, 'output.html'), converXMLString(mergeData), { encoding: 'utf-8' });
@@ -80,6 +81,70 @@ function elevateToTopLevelPath(data, init = { topGroups: [], depth: 0 }) {
     }
 
     return data;
+}
+
+/** http, https 그외로 URL 을 분류 합니다 (elevateToTopLevelPath 선행 필요) */
+function protocolGroup(data) {
+    let nowDt = String(Date.now()).substring(0, 10);
+
+    data.item.map(it => {
+        const grp = it.item.reduce((init, curr) => {
+            const href = curr?.$attr?.HREF ?? '';
+            const { http, https, none } = init;
+
+            if (href.indexOf('https') === 0) {
+                https.push(curr);
+                return init;
+            }
+
+            if (href.indexOf('http') === 0) {
+                http.push(curr);
+                return init;
+            }
+
+            none.push(curr);
+            return init;
+        }, { it, http: [], https: [], none: [] });
+
+        it.item = [
+            {
+                type: "group",
+                header: {
+                    "type": "heading",
+                    "$attr": {
+                        "ADD_DATE": nowDt,
+                        "LAST_MODIFIED": nowDt
+                    },
+                    "$text": "http"
+                },
+                item: grp.http
+            },
+            {
+                type: "group",
+                header: {
+                    "type": "heading",
+                    "$attr": {
+                        "ADD_DATE": nowDt,
+                        "LAST_MODIFIED": nowDt
+                    },
+                    "$text": "https"
+                },
+                item: grp.https
+            },
+            {
+                type: "group",
+                header: {
+                    "type": "heading",
+                    "$attr": {
+                        "ADD_DATE": nowDt,
+                        "LAST_MODIFIED": nowDt
+                    },
+                    "$text": "none"
+                },
+                item: grp.none
+            }
+        ];
+    });
 }
 
 /** 중복 URL 제거 */
